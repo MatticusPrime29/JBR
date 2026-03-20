@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset(
 
     // Validate directly (no cURL — the PHP built-in server is single-threaded
     // and a self-referential HTTP request would deadlock it).
-    $sessionFile = __DIR__ . '/session.json';
+    $sessionFile = __DIR__ . '/../session.json';
     $result = ['success' => false, 'message' => 'Session not initialized'];
     if (file_exists($sessionFile)) {
         $data = json_decode(file_get_contents($sessionFile), true);

@@ -3,7 +3,7 @@
 header('Content-Type: application/json');
 
 
-$sessionFile = 'session.json';
+$sessionFile = __DIR__ . '/../session.json';
 if (!file_exists($sessionFile)) {
     echo json_encode(['error' => 'Session not initialized']);
     exit;
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($input['username'] ?? '');
         $code = strtoupper(trim($input['code'] ?? ''));
         if ($code !== $data['active_access_code']) {
-            echo json_encode(['success' => false, 'message' => $data['active_access_code']]);
+            echo json_encode(['success' => false, 'message' => 'Invalid access code']);
             exit;
         }
 
@@ -72,8 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // GET request (from admin maybe to just read state)
     echo json_encode([
         'current_view' => $data['current_view_html'],
-        'users' => array_keys($data['connected_users']),
-        'access_code' => $data['active_access_code']
+        'users' => array_keys($data['connected_users'])
     ]);
 }
 

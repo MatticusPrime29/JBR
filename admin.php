@@ -1,7 +1,7 @@
 <?php
 // admin.php - Control Panel for Presentation
 session_start();
-$sessionFile = 'session.json';
+$sessionFile = __DIR__ . '/../session.json';
 $data = json_decode(file_get_contents($sessionFile), true);
 
 // Password protection
