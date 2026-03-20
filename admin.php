@@ -4,12 +4,18 @@ require_once __DIR__ . '/boot.php';
 // Password protection
 if (isset($_POST['admin_key']) && $_POST['admin_key'] === $data['admin_key']) {
     $token = bin2hex(random_bytes(16));
-    $username = 'Admin_' . substr($token, 0, 4);
+    $username = 'Admin'; // Stable username for the control panel
     
     $_SESSION['is_admin'] = true;
     $_SESSION['student_user'] = $username;
     
-    // Admins are also in connected_users for token validation
+    // Clear any existing Admin_xxxx stale entries to keep session.json clean
+    foreach ($data['connected_users'] as $u => $info) {
+        if (strpos($u, 'Admin') === 0) {
+            unset($data['connected_users'][$u]);
+        }
+    }
+
     $data['connected_users'][$username] = [
         'last_seen' => time(),
         'token' => $token,
@@ -146,13 +152,18 @@ $htmlFiles = glob("*.html");
                 <button type="submit" class="danger">Regenerate Code (Kicks Everyone)</button>
             </form>
 
-            <h3 style="margin-top:2rem;">Connected Students (<?= count((array)$data['connected_users']) ?>)</h3>
+            <?php 
+                $students = array_filter((array)$data['connected_users'], function($u) {
+                    return !($u['is_admin'] ?? false);
+                });
+            ?>
+            <h3 style="margin-top:2rem;">Connected Students (<?= count($students) ?>)</h3>
             <ul>
-                <?php foreach ((array)$data['connected_users'] as $user => $info): ?>
+                <?php foreach ($students as $name => $info): ?>
                 <li>
-                    <span>👤 <?= htmlspecialchars((string)$user) ?></span>
+                    <span>👤 <?= htmlspecialchars((string)$name) ?></span>
                     <form method="POST" style="display:inline;">
-                        <input type="hidden" name="kick_user" value="<?= htmlspecialchars((string)$user) ?>">
+                        <input type="hidden" name="kick_user" value="<?= htmlspecialchars((string)$name) ?>">
                         <button type="submit" class="danger" style="padding: 4px 8px; font-size: 0.8rem;">Kick</button>
                     </form>
                 </li>
