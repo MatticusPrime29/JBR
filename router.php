@@ -2,14 +2,14 @@
 // router.php
 // Intercepts requests to the PHP built-in server to secure HTML files
 
+require_once __DIR__ . '/boot.php';
+
 $requestUri = $_SERVER['REQUEST_URI'];
 $path = parse_url($requestUri, PHP_URL_PATH);
 $ext = pathinfo($path, PATHINFO_EXTENSION);
 
 // If it's an HTML file, check authentication
 if ($ext === 'html') {
-    session_start();
-
     // Admins can view any file
     $isAdmin = isset($_SESSION['is_admin']) && $_SESSION['is_admin'] === true;
 
@@ -17,12 +17,9 @@ if ($ext === 'html') {
     $isStudent = false;
     $isActiveView = false;
 
-    $sessionFile = __DIR__ . '/session.json';
-    if (file_exists($sessionFile)) {
-        $data = json_decode(file_get_contents($sessionFile), true);
-
-        $username = $_SESSION['student_user'] ?? '';
-        if ($username && isset($data['connected_users'][$username])) {
+    if (isset($_SESSION['student_user'])) {
+        $username = $_SESSION['student_user'];
+        if (isset($data['connected_users'][$username])) {
             $isStudent = true;
         }
 

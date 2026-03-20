@@ -1,12 +1,13 @@
 <?php
-// index.php - Student View
-session_start();
+require_once __DIR__ . '/boot.php';
 
-// If the user was kicked, destroy their PHP session so the join screen shows
-// instead of re-entering the presentation view and causing an infinite poll loop.
+// If the user was kicked, destroy their PHP session and cookies
 if (isset($_GET['kicked'])) {
     session_unset();
     session_destroy();
+    clear_jbr_cookies();
+    header("Location: index.php");
+    exit;
 }
 
 // Handle Join
@@ -14,25 +15,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username']) && isset(
     $username = trim($_POST['username']);
     $code = strtoupper(trim($_POST['code']));
 
-    // Validate directly (no cURL — the PHP built-in server is single-threaded
-    // and a self-referential HTTP request would deadlock it).
-    $sessionFile = __DIR__ . '/session.json';
     $result = ['success' => false, 'message' => 'Session not initialized'];
-    if (file_exists($sessionFile)) {
-        $data = json_decode(file_get_contents($sessionFile), true);
-        if ($code !== ($data['active_access_code'] ?? '')) {
-            $result = ['success' => false, 'message' => 'Invalid access code'];
-        } elseif (empty($username)) {
-            $result = ['success' => false, 'message' => 'Username cannot be empty'];
-        } else {
-            $data['connected_users'][$username] = time();
-            file_put_contents($sessionFile, json_encode($data, JSON_PRETTY_PRINT));
-            $result = ['success' => true];
-        }
+    
+    if ($code !== ($data['active_access_code'] ?? '')) {
+        $result = ['success' => false, 'message' => 'Invalid access code'];
+    } elseif (empty($username)) {
+        $result = ['success' => false, 'message' => 'Username cannot be empty'];
+    } else {
+        // Generate a unique token for this session
+        $token = bin2hex(random_bytes(16));
+        
+        $data['connected_users'][$username] = [
+            'last_seen' => time(),
+            'token' => $token,
+            'is_admin' => false
+        ];
+        save_session_data($data);
+        
+        // Set persistent cookies
+        set_jbr_cookie('jbr_user', $username);
+        set_jbr_cookie('jbr_token', $token);
+        
+        $_SESSION['student_user'] = $username;
+        $result = ['success' => true];
     }
 
     if ($result['success']) {
-        $_SESSION['student_user'] = $username;
         header("Location: index.php");
         exit;
     } else {

@@ -2,20 +2,13 @@
 // state.php - API endpoint for student polling
 header('Content-Type: application/json');
 
-
-$sessionFile = __DIR__ . '/session.json';
-if (!file_exists($sessionFile)) {
-    echo json_encode(['error' => 'Session not initialized']);
-    exit;
-}
-
-
-$data = json_decode(file_get_contents($sessionFile), true);
+require_once __DIR__ . '/boot.php';
 
 // Clean up inactive users (no ping in 10 seconds)
 $now = time();
 $changed = false;
-foreach ($data['connected_users'] as $username => $lastSeen) {
+foreach ($data['connected_users'] as $username => $info) {
+    $lastSeen = is_array($info) ? ($info['last_seen'] ?? 0) : $info;
     if ($now - $lastSeen > 10) {
         unset($data['connected_users'][$username]);
         $changed = true;
@@ -40,7 +33,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Update last seen
-        $data['connected_users'][$username] = time();
+        if (is_array($data['connected_users'][$username])) {
+            $data['connected_users'][$username]['last_seen'] = time();
+        } else {
+            $data['connected_users'][$username] = [
+                'last_seen' => time(),
+                'token' => bin2hex(random_bytes(16)),
+                'is_admin' => false
+            ];
+        }
         $changed = true;
 
         echo json_encode([
@@ -63,7 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $data['connected_users'][$username] = time();
+        $data['connected_users'][$username] = [
+            'last_seen' => time(),
+            'token' => bin2hex(random_bytes(16)),
+            'is_admin' => false
+        ];
         $changed = true;
 
         echo json_encode(['success' => true]);

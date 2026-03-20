@@ -1,16 +1,34 @@
 <?php
-// admin.php - Control Panel for Presentation
-session_start();
-$sessionFile = __DIR__ . '/session.json';
-$data = json_decode(file_get_contents($sessionFile), true);
+require_once __DIR__ . '/boot.php';
 
 // Password protection
 if (isset($_POST['admin_key']) && $_POST['admin_key'] === $data['admin_key']) {
+    $token = bin2hex(random_bytes(16));
+    $username = 'Admin_' . substr($token, 0, 4);
+    
     $_SESSION['is_admin'] = true;
+    $_SESSION['student_user'] = $username;
+    
+    // Admins are also in connected_users for token validation
+    $data['connected_users'][$username] = [
+        'last_seen' => time(),
+        'token' => $token,
+        'is_admin' => true
+    ];
+    save_session_data($data);
+    
+    set_jbr_cookie('jbr_user', $username);
+    set_jbr_cookie('jbr_token', $token);
 }
+
 // Logout
 if (isset($_GET['logout'])) {
+    if (isset($_SESSION['student_user'])) {
+        unset($data['connected_users'][$_SESSION['student_user']]);
+        save_session_data($data);
+    }
     session_destroy();
+    clear_jbr_cookies();
     header("Location: admin.php");
     exit;
 }
@@ -106,7 +124,7 @@ $htmlFiles = glob("*.html");
         <!-- CONTROLS -->
         <div class="card">
             <h2>Current Presentation View</h2>
-            <p style="color:#94a3b8">Active: <strong><?= htmlspecialchars($data['current_view_html']) ?></strong></p>
+            <p style="color:#94a3b8">Active: <strong><?= htmlspecialchars((string)($data['current_view_html'] ?? '')) ?></strong></p>
             <form method="POST">
                 <select name="new_view">
                     <?php foreach ($htmlFiles as $file): ?>
@@ -122,7 +140,7 @@ $htmlFiles = glob("*.html");
         <!-- USERS & CODE -->
         <div class="card">
             <h2>Active Access Code</h2>
-            <div class="code-box"><?= htmlspecialchars($data['active_access_code']) ?></div>
+            <div class="code-box"><?= htmlspecialchars((string)($data['active_access_code'] ?? '')) ?></div>
             <form method="POST" style="text-align:center; margin-top: 10px;">
                 <input type="hidden" name="refresh_code" value="1">
                 <button type="submit" class="danger">Regenerate Code (Kicks Everyone)</button>
@@ -130,11 +148,11 @@ $htmlFiles = glob("*.html");
 
             <h3 style="margin-top:2rem;">Connected Students (<?= count((array)$data['connected_users']) ?>)</h3>
             <ul>
-                <?php foreach ((array)$data['connected_users'] as $user => $time): ?>
+                <?php foreach ((array)$data['connected_users'] as $user => $info): ?>
                 <li>
-                    <span>👤 <?= htmlspecialchars($user) ?></span>
+                    <span>👤 <?= htmlspecialchars((string)$user) ?></span>
                     <form method="POST" style="display:inline;">
-                        <input type="hidden" name="kick_user" value="<?= htmlspecialchars($user) ?>">
+                        <input type="hidden" name="kick_user" value="<?= htmlspecialchars((string)$user) ?>">
                         <button type="submit" class="danger" style="padding: 4px 8px; font-size: 0.8rem;">Kick</button>
                     </form>
                 </li>
