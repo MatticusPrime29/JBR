@@ -3,7 +3,7 @@
 header('Content-Type: application/json');
 
 
-$sessionFile = __DIR__ . '/../session.json';
+$sessionFile = __DIR__ . '/session.json';
 if (!file_exists($sessionFile)) {
     echo json_encode(['error' => 'Session not initialized']);
     exit;

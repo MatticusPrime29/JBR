@@ -1,0 +1,4 @@
+<FilesMatch "\.(json|py|sh|pub)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

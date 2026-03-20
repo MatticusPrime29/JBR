@@ -17,7 +17,7 @@ if ($ext === 'html') {
     $isStudent = false;
     $isActiveView = false;
 
-    $sessionFile = __DIR__ . '/../session.json';
+    $sessionFile = __DIR__ . '/session.json';
     if (file_exists($sessionFile)) {
         $data = json_decode(file_get_contents($sessionFile), true);
 
