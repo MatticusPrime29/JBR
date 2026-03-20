@@ -4,16 +4,14 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/boot.php';
 
-// Clean up inactive users (no ping in 10 seconds)
+// Clean up inactive users (Not unsetting anymore for Option A persistence)
 $now = time();
 $changed = false;
+/*
 foreach ($data['connected_users'] as $username => $info) {
-    $lastSeen = is_array($info) ? ($info['last_seen'] ?? 0) : $info;
-    if ($now - $lastSeen > 10) {
-        unset($data['connected_users'][$username]);
-        $changed = true;
-    }
+    ...
 }
+*/
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Try JSON first

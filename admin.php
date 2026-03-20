@@ -153,8 +153,11 @@ $htmlFiles = glob("*.html");
             </form>
 
             <?php 
-                $students = array_filter((array)$data['connected_users'], function($u) {
-                    return !($u['is_admin'] ?? false);
+                $now = time();
+                $students = array_filter((array)$data['connected_users'], function($u) use ($now) {
+                    $isStudent = !($u['is_admin'] ?? false);
+                    $isActive = ($now - ($u['last_seen'] ?? 0)) < 30; // Clean UI: 30s timeout
+                    return $isStudent && $isActive;
                 });
             ?>
             <h3 style="margin-top:2rem;">Connected Students (<?= count($students) ?>)</h3>
