@@ -1,8 +1,27 @@
 {
     "admin_key": "secret_key_4739",
     "active_access_code": "8A1K",
-    "current_view_html": "jbr_damage_nilearn.html",
+    "current_view_html": "jbr_damage.html",
     "connected_users": {
-        "Matticus": 1773589908
+        "Matticus": {
+            "last_seen": 1773589908,
+            "token": "5eeacc5c061ab3be28e67320ec52b403",
+            "is_admin": false
+        },
+        "Matt": {
+            "last_seen": 1774327747,
+            "token": "8800c4b9a505fe584b30e8e60d3963e8",
+            "is_admin": false
+        },
+        "Admin": {
+            "last_seen": 1774196355,
+            "token": "96dd0978430944cb4e9d2cc8f1a08972",
+            "is_admin": true
+        },
+        "TestUser": {
+            "last_seen": 1774393877,
+            "token": "24161293814ef87492334bcc0298e6f1",
+            "is_admin": false
+        }
     }
 }
