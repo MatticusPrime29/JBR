@@ -51,37 +51,28 @@ def build_map(atlas):
 
     return nib.Nifti1Image(scalar_data, ref_img.affine, ref_img.header)
 
-def make_legend_html():
+def make_legend_html(subtitle=""):
     items = [
-        ('<div style="width:24px;height:24px;border-radius:4px;background:#ffffff;border:1px solid #ccc;flex-shrink:0"></div>', 'Uncinate Fasciculus'),
-        ('<div style="width:24px;height:24px;border-radius:4px;background:#00bfff;flex-shrink:0"></div>', 'IFOF (ILF Proxy)'),
-        ('<div style="width:24px;height:24px;border-radius:4px;background:#ff69b4;flex-shrink:0"></div>', 'Fornix (Hippocampal Output)')
+        ('<div style="width:20px;height:20px;border-radius:4px;background:#ffffff;border:1px solid rgba(255,255,255,0.2)"></div>', 'Uncinate Fasciculus'),
+        ('<div style="width:20px;height:20px;border-radius:4px;background:#00bfff;border:1px solid rgba(255,255,255,0.2)"></div>', 'IFOF (ILF Proxy)'),
+        ('<div style="width:20px;height:20px;border-radius:4px;background:#ff69b4;border:1px solid rgba(255,255,255,0.2)"></div>', 'Fornix (Hippocampal Output)')
     ]
-    html_items = "".join(f'<div style="display:flex;align-items:center;gap:12px;margin:10px 0">{icon}<span style="font-weight:600; font-size:15px;">{label}</span></div>' for icon, label in items)
+    html_items = "".join(f'<div style="display:flex;align-items:center;gap:12px;margin:10px 0">{icon}<span style="font-weight:500; font-size:14px; color:#e2e8f0">{label}</span></div>' for icon, label in items)
     
     return f"""
-    <div id="wm-legend" style="position:fixed;bottom:40px;right:40px;background:rgba(15,23,42,0.92);
-         border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:24px 30px; backdrop-filter: blur(12px);
-         font-family:-apple-system, system-ui, sans-serif;color:#f8fafc;z-index:9999;max-width:380px;box-shadow: 0 15px 50px rgba(0,0,0,0.6);">
-      <div style="font-weight:800;font-size:22px;margin-bottom:12px;color:#38bdf8;letter-spacing:-0.025em">
-        White Matter Tracts
-      </div>
+    <div id="wm-legend" style="position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,0.85);
+         border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:16px 24px; backdrop-filter: blur(20px);
+         font-family:system-ui, -apple-system, sans-serif;z-index:9999;width:85%;max-width:320px;box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+      <div style="font-weight:800;font-size:18px;margin-bottom:2px;color:#38bdf8;letter-spacing:-0.01em">White Matter Tracts</div>
+      <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">{subtitle}</div>
       {html_items}
-      <div style="margin-top:16px;font-size:13px;color:#94a3b8;line-height:1.4">
-        Visualizing pathways critical for J.B.R.'s semantic and memory processing.
-      </div>
     </div>"""
 
 def get_responsive_patch():
     return """
 <style>
-    body { background: transparent !important; margin: 0; padding: 0; overflow: hidden; height: 100vh; }
-    #view-canvas { width: 100%; height: 100vh !important; }
-    
-    @media (max-width: 1024px) {
-        #wm-legend { display: none !important; }
-    }
-
+    body { background: transparent !important; margin: 0; padding: 0; overflow: hidden; height: 100vh; display: flex; align-items: center; justify-content: center; }
+    canvas { touch-action: none; }
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -91,24 +82,20 @@ window.addEventListener('message', function(e) {
         const b = window.brain;
         if (!b || !b.widthCanvas) return;
         
-        let maxW = window.innerWidth;
+        let winW = window.innerWidth;
+        let winH = window.innerHeight;
         const tX = b.widthCanvas.X;
         const tY = b.widthCanvas.Y;
         const tZ = b.widthCanvas.Z;
+        const tH = b.heightCanvas.max;
+
+        canvas.style.transformOrigin = 'center center';
+        canvas.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
         
-        canvas.style.transformOrigin = '0 50%';
-        canvas.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-        
-        if (e.data.axis === 'X') {
-             let scale = maxW / tX;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(0px)`;
-        } else if (e.data.axis === 'Y') {
-             let scale = maxW / tY;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(-${tX}px)`;
-        } else if (e.data.axis === 'Z') {
-             let scale = maxW / tZ;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(-${tX + tY}px)`;
-        }
+        const tW = (e.data.axis === 'X') ? b.widthCanvas.X : (e.data.axis === 'Y' ? b.widthCanvas.Y : b.widthCanvas.Z);
+
+        // Fixed scale: No more aggressive zooming
+        canvas.style.transform = `scale(0.95)`;
     }
 });
 </script>
@@ -132,7 +119,7 @@ def export_view(img, output_path):
     with open(output_path, "r") as f: full_html = f.read()
     full_html = full_html.replace("var brain = brainsprite", "window.brain = brainsprite")
     full_html = full_html.replace('"crosshair": true', '"crosshair": false')
-    full_html = full_html.replace("</body>", f"{get_responsive_patch()}{make_legend_html()}</body>")
+    full_html = full_html.replace("</body>", f"{get_responsive_patch()}{make_legend_html('Slice View (Subcortical)')}</body>")
     if "<head>" in full_html:
         full_html = full_html.replace("<head>", '<head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">')
     with open(output_path, "w") as f: f.write(full_html)

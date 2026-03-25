@@ -15,6 +15,7 @@ LESION_REGIONS = [
     ("Middle Temporal Gyrus, anterior division", "both", (255, 150, 50, 255)),
     ("Inferior Temporal Gyrus, anterior division", "both", (255, 150, 50, 255)),
     ("Temporal Fusiform Cortex, anterior division", "both", (255, 150, 50, 255)),
+    ("Temporal Fusiform Cortex, posterior division", "both", (255, 150, 50, 255)),
     ("Parahippocampal Gyrus, anterior division", "both", (255, 150, 50, 255))
 ]
 
@@ -85,47 +86,40 @@ def build_lesion_map(sub_atlas, cort_atlas):
 
     return nib.Nifti1Image(scalar_data, ref_img.affine, ref_img.header)
 
-def make_legend_html():
-    # Group regions by color for a cleaner legend
-    seen_colors = {}
-    for i, (name, hemi, rgba) in enumerate(LESION_REGIONS, start=1):
-        color_hex = '#{:02x}{:02x}{:02x}'.format(rgba[0], rgba[1], rgba[2])
-        # Grouping logic: name the group by the first region that uses this color
-        if color_hex not in seen_colors:
-            if "Hippocampus" in name:
-                display_name = "Hippocampus (R: Total, L: Anterior)"
-            elif "Amygdala" in name:
-                display_name = "Amygdala (Bilateral)"
-            elif "Temporal Pole" in name:
-                display_name = "Anterior Temporal Pole (Hub)"
-            elif "Gyrus" in name or "Cortex" in name:
-                display_name = "Lateral & Inferior Temporal Cortex"
-            else:
-                display_name = name
-            seen_colors[color_hex] = display_name
-        
-    items = "".join(f'<div style="display:flex;align-items:center;gap:12px;margin:10px 0">'
-                    f'<div style="width:24px;height:24px;border-radius:4px;background:{colour};flex-shrink:0"></div>'
-                    f'<span style="font-weight:600; font-size:15px;">{label}</span></div>' for colour, label in seen_colors.items())
-    return f"""
-    <div id="lesion-legend" style="position:fixed;bottom:40px;right:40px;background:rgba(15,23,42,0.92);
-         border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:24px 30px; backdrop-filter: blur(12px);
-         font-family:-apple-system, system-ui, sans-serif;color:#f8fafc;z-index:9999;max-width:380px;box-shadow: 0 15px 50px rgba(0,0,0,0.6);">
-      <div style="font-weight:800;font-size:22px;margin-bottom:12px;color:#38bdf8;letter-spacing:-0.025em">
-        J.B.R. Lesion Map
-      </div>
-      {items}
-    </div>"""
+def export_view_slice(lesion_img, output_path):
+    """Generates the Brainsprite-based slice viewer."""
+    print(f"Generating Slice view → {output_path}")
+    colors_list = [[0, 0, 0, 0]] 
+    for _, _, rgba in LESION_REGIONS:
+        colors_list.append([c/255.0 for c in rgba])
+    
+    custom_cmap = ListedColormap(colors_list)
+    html_view = plotting.view_img(lesion_img, bg_img="MNI152", threshold=0.5, colorbar=False,
+                                 title="J.B.R. Lesion Map - Slices", cmap=custom_cmap, 
+                                 vmin=0, vmax=len(LESION_REGIONS), symmetric_cmap=False)
+    html_view.save_as_html(output_path)
+    
+    with open(output_path, "r") as f:
+        full_html = f.read()
+
+    full_html = full_html.replace("var brain = brainsprite", "window.brain = brainsprite")
+    full_html = full_html.replace('"crosshair": true', '"crosshair": false')
+    custom_ui = f"{get_responsive_patch()}\n{make_legend_html('Slice View (Subcortical)')}"
+    
+    if "</body>" in full_html:
+        full_html = full_html.replace("</body>", f"{custom_ui}</body>")
+    
+    if "<head>" in full_html:
+        full_html = full_html.replace("<head>", '<head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">')
+
+    with open(output_path, "w") as f:
+        f.write(full_html)
 
 def get_responsive_patch():
     return """
 <style>
-    body { background: transparent !important; margin: 0; padding: 0; overflow: hidden; height: 100vh; }
-    #view-canvas { width: 100%; height: 100vh !important; }
-    
-    @media (max-width: 1024px) {
-        #lesion-legend { display: none !important; }
-    }
+    body { background: transparent !important; margin: 0; padding: 0; overflow: hidden; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; }
+    canvas { touch-action: none; display: block; }
 </style>
 <script>
 window.addEventListener('message', function(e) {
@@ -135,67 +129,98 @@ window.addEventListener('message', function(e) {
         const b = window.brain;
         if (!b || !b.widthCanvas) return;
         
-        let maxW = window.innerWidth;
-        const tX = b.widthCanvas.X;
-        const tY = b.widthCanvas.Y;
-        const tZ = b.widthCanvas.Z;
+        // Use the actual slice dimensions for the current axis
+        const tW = (e.data.axis === 'X') ? b.widthCanvas.X : (e.data.axis === 'Y' ? b.widthCanvas.Y : b.widthCanvas.Z);
+        const tH = b.heightCanvas.max;
         
-        canvas.style.transformOrigin = '0 50%';
-        canvas.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+        canvas.style.transformOrigin = 'center center';
+        canvas.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
         
-        if (e.data.axis === 'X') {
-             let scale = maxW / tX;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(0px)`;
-        } else if (e.data.axis === 'Y') {
-             let scale = maxW / tY;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(-${tX}px)`;
-        } else if (e.data.axis === 'Z') {
-             let scale = maxW / tZ;
-             canvas.style.transform = `translateY(-30%) scale(${scale}) translateX(-${tX + tY}px)`;
-        }
+        let winW = window.innerWidth;
+        let winH = window.innerHeight;
+        
+        // Fixed scale: No more aggressive zooming
+        canvas.style.transform = `scale(0.95)`;
     }
 });
 </script>
 """
 
-def export_view(lesion_img, output_path):
-    print(f"Generating view → {output_path}")
+def export_view_surf(lesion_img, output_path):
+    """Generates the high-quality 3D surface viewer."""
+    print(f"Generating Surface view → {output_path}")
     
-    from matplotlib.colors import ListedColormap
-    # Add a transparent color for index 0 (background)
-    colors_list = [[0, 0, 0, 0]] 
+    colors_list = [[0, 0, 0, 1.0]] # First is transparent-ish background
     for _, _, rgba in LESION_REGIONS:
         colors_list.append([c/255.0 for c in rgba])
-    
     custom_cmap = ListedColormap(colors_list)
-    
-    # We set vmin=0 and vmax=len(LESION_REGIONS) to ensure 
-    # Index 1 is always the 2nd color (Blue), Index 2 is 3rd (Red), etc.
-    html_view = plotting.view_img(lesion_img, bg_img="MNI152", threshold=0.5, colorbar=False,
-                                 title="J.B.R. Lesion Map", cmap=custom_cmap, 
-                                 vmin=0, vmax=len(LESION_REGIONS), symmetric_cmap=False)
+
+    # Use view_img_on_surf for a beautiful 3D cortical view
+    html_view = plotting.view_img_on_surf(lesion_img, surf_mesh='fsaverage5', threshold=0.5,
+                                         cmap=custom_cmap, colorbar=False, 
+                                         vmin=0, vmax=len(LESION_REGIONS),
+                                         title="J.B.R. Lesion Map - 3D Surface")
     
     html_view.save_as_html(output_path)
     
     with open(output_path, "r") as f:
         full_html = f.read()
 
-    full_html = full_html.replace("var brain = brainsprite", "window.brain = brainsprite")
-    full_html = full_html.replace('"crosshair": true', '"crosshair": false')
-    custom_ui = f"{get_responsive_patch()}\n{make_legend_html()}"
+    # Simplify UI for surface: no need for brainsprite patch, just centering and legend
+    custom_style = """
+<style>
+    body { background: #000 !important; margin: 0; padding: 0; overflow: hidden; }
+    canvas { outline: none !important; }
+</style>
+<script>
+    // Nilearn surface views just work usually, but let's ensure meta tags
+    window.addEventListener('message', function(e) {
+        // Surface view doesn't handle axis, but we listen to prevent errors
+    });
+</script>
+"""
+    custom_ui = f"{custom_style}\n{make_legend_html('3D Surface View')}"
     
     if "</body>" in full_html:
         full_html = full_html.replace("</body>", f"{custom_ui}</body>")
-    else:
-        full_html += custom_ui
-
+    
     if "<head>" in full_html:
         full_html = full_html.replace("<head>", '<head><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">')
 
     with open(output_path, "w") as f:
         f.write(full_html)
 
+def make_legend_html(subtitle=""):
+    seen_colors = {}
+    for name, hemi, rgba in LESION_REGIONS:
+        color_hex = '#{:02x}{:02x}{:02x}'.format(rgba[0], rgba[1], rgba[2])
+        if color_hex not in seen_colors:
+            if "Hippocampus" in name: display_name = "Hippocampus (R: Total, L: Anterior)"
+            elif "Amygdala" in name: display_name = "Amygdala (Bilateral)"
+            elif "Temporal Pole" in name: display_name = "Anterior Temporal Pole (Hub)"
+            elif "Fusiform" in name: display_name = "Fusiform Gyrus"
+            elif "Gyrus" in name or "Cortex" in name: display_name = "Lateral & Inferior Temporal Cortex"
+            else: display_name = name
+            seen_colors[color_hex] = display_name
+        
+    items = "".join(f'<div style="display:flex;align-items:center;gap:12px;margin:10px 0">'
+                    f'<div style="width:20px;height:20px;border-radius:4px;background:{colour};border:1px solid rgba(255,255,255,0.2)"></div>'
+                    f'<span style="font-weight:500; font-size:14px; color:#e2e8f0">{label}</span></div>' for colour, label in seen_colors.items())
+    
+    return f"""
+    <div id="lesion-legend" style="position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,0.85);
+         border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:16px 24px; backdrop-filter: blur(20px);
+         font-family:system-ui, -apple-system, sans-serif;z-index:9999;width:85%;max-width:320px;box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+      <div style="font-weight:800;font-size:18px;margin-bottom:2px;color:#38bdf8;letter-spacing:-0.01em">J.B.R. Lesion Map</div>
+      <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">{subtitle}</div>
+      {items}
+    </div>"""
+
 if __name__ == "__main__":
     sub_atlas, cort_atlas = fetch_atlases()
     lesion_img = build_lesion_map(sub_atlas, cort_atlas)
-    export_view(lesion_img, os.path.join(OUTPUT_DIR, "jbr_damage.html"))
+    
+    # Generate Slices
+    export_view_slice(lesion_img, os.path.join(OUTPUT_DIR, "jbr_damage_slices.html"))
+    # Generate Surface
+    export_view_surf(lesion_img, os.path.join(OUTPUT_DIR, "jbr_damage.html"))

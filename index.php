@@ -88,6 +88,11 @@ if (isset($_SESSION['student_user'])) {
                 width: 100%;
                 height: 100vh;
                 height: 100dvh;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
             }
 
             iframe {
@@ -102,13 +107,13 @@ if (isset($_SESSION['student_user'])) {
                 bottom: 0;
                 left: 0;
                 width: 100%;
-                padding-bottom: env(safe-area-inset-bottom, 20px);
                 background: linear-gradient(to top, rgba(2,6,23, 1) 0%, rgba(2,6,23, 0.8) 40%, rgba(2,6,23, 0) 100%);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 z-index: 100;
                 pointer-events: none;
+                padding-bottom: env(safe-area-inset-bottom, 10px);
             }
 
             /* --- Slider --- */
@@ -209,6 +214,7 @@ if (isset($_SESSION['student_user'])) {
 
             .tab-btn.active {
                 color: var(--accent-color);
+                background: rgba(59, 130, 246, 0.1);
             }
 
             .tab-btn.active svg {
@@ -216,8 +222,37 @@ if (isset($_SESSION['student_user'])) {
                 filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
             }
 
-            .tab-btn:hover {
+            .tab-btn:hover:not(.active) {
                 background: rgba(255,255,255,0.05);
+            }
+
+            /* --- Surface/Slice Toggle --- */
+            .view-toggle {
+                display: flex;
+                background: rgba(15, 23, 42, 0.9);
+                padding: 4px;
+                border-radius: 12px;
+                border: 1px solid rgba(255,255,255,0.1);
+                margin-bottom: 20px;
+                pointer-events: auto;
+            }
+
+            .toggle-btn {
+                padding: 8px 16px;
+                border-radius: 9px;
+                border: none;
+                background: transparent;
+                color: var(--text-muted);
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: 0.2s all;
+            }
+
+            .toggle-btn.active {
+                background: var(--accent-color);
+                color: white;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
             }
 
             /* Overlay Status/Logout */
@@ -290,8 +325,8 @@ if (isset($_SESSION['student_user'])) {
     <body>
         
         <div id="viewer-container">
-            <iframe id="presentationFrame" src="" style="pointer-events: none;"></iframe>
-            <div id="loader">Loading Brain Model...</div>
+            <iframe id="presentationFrame" src=""></iframe>
+            <div id="loader">Synchronizing View...</div>
         </div>
 
         <div class="top-bar">
@@ -299,14 +334,19 @@ if (isset($_SESSION['student_user'])) {
             <a href="logout.php" class="logout-btn">Leave</a>
         </div>
 
-        <div class="ui-overlay">
+        <div class="ui-overlay" id="mainOverlay" style="opacity: 0; pointer-events: none; transition: opacity 0.5s;">
             
-            <div class="slider-container" id="sliderContainer" style="opacity: 0; pointer-events: none;">
+            <div class="view-toggle" id="viewToggle">
+                <button class="toggle-btn active" data-view="surf">3D Surface</button>
+                <button class="toggle-btn" data-view="slice">Anatomical Slices</button>
+            </div>
+
+            <div class="slider-container" id="sliderContainer" style="opacity: 0; pointer-events: none; display: none;">
                 <span class="slider-label" id="sliderLabel">Slice Y</span>
                 <input type="range" id="sliceSlider" min="0" max="100" value="50">
             </div>
 
-            <div class="tab-bar">
+            <div class="tab-bar" id="sliceTabs" style="display: none;">
                 <button class="tab-btn" data-axis="Z" data-label="Top-Down Slice">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -342,10 +382,46 @@ if (isset($_SESSION['student_user'])) {
             const sliderLabel = document.getElementById('sliderLabel');
             const loader = document.getElementById('loader');
 
+            const viewToggles = document.querySelectorAll('.toggle-btn');
+            const sliceTabsContainer = document.getElementById('sliceTabs');
+            const toggleContainer = document.getElementById('viewToggle');
+
+            let currentViewMode = 'surf'; // 'surf' or 'slice'
             let currentAxis = 'Y';
             let brainRef = null;
             let syncInterval = null;
             let currentDatasetHtml = 'none.html';
+
+            // Handle View Type Switching (Surface vs Slice)
+            viewToggles.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if(btn.classList.contains('active')) return;
+                    viewToggles.forEach(t => t.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentViewMode = btn.getAttribute('data-view');
+                    updateIframeSource(currentDatasetHtml);
+                });
+            });
+
+            function updateIframeSource(baseHtml) {
+                if(!baseHtml || baseHtml === 'none.html') return;
+                
+                let targetSrc = baseHtml;
+                // Currently only JBR supports dual views
+                if (baseHtml === 'jbr_damage.html' && currentViewMode === 'slice') {
+                    targetSrc = 'jbr_damage_slices.html';
+                }
+
+                iframe.src = targetSrc;
+                
+                if (currentViewMode === 'slice') {
+                    sliceTabsContainer.style.display = 'flex';
+                    sliderCont.style.display = 'flex';
+                } else {
+                    sliceTabsContainer.style.display = 'none';
+                    sliderCont.style.display = 'none';
+                }
+            }
 
             // Handle Orientation Switching
             tabs.forEach(tab => {
@@ -369,19 +445,48 @@ if (isset($_SESSION['student_user'])) {
 
             // Re-initialize when iframe loads its content
             iframe.addEventListener('load', () => {
+                const win = iframe.contentWindow;
+                // Surface View and Slice View logic
+                let attempts = 0;
                 const pollTimer = setInterval(() => {
-                    if (iframe.contentWindow && iframe.contentWindow.window && iframe.contentWindow.window.brain) {
+                    attempts++;
+                    if (win && (win.window.brain || win.document.querySelector('canvas'))) {
                         clearInterval(pollTimer);
-                        brainRef = iframe.contentWindow.window.brain;
+                        brainRef = win.window.brain;
                         loader.style.opacity = '0';
-                        iframe.contentWindow.postMessage({ axis: currentAxis }, "*");
-                        setupSlider();
+                        document.getElementById('mainOverlay').style.opacity = '1';
+                        document.getElementById('mainOverlay').style.pointerEvents = 'auto';
+                        
+                        // Only show slice controls if we are in slice mode AND it's a brain file
+                        const isBrainFile = currentDatasetHtml.includes('jbr_') || currentDatasetHtml.includes('perirhinal') || currentDatasetHtml.includes('white_matter');
+                        
+                        // Force slice mode for Perirhinal and WM for now (they don't have surface yet)
+                        const supportsSurface = currentDatasetHtml === 'jbr_damage.html' || currentDatasetHtml === 'jbr_damage_slices.html';
+                        toggleContainer.style.display = supportsSurface ? 'flex' : 'none';
+
+                        if (currentViewMode === 'slice' || !supportsSurface) {
+                            sliceTabsContainer.style.display = 'flex';
+                            win.postMessage({ axis: currentAxis }, "*");
+                            setupSlider();
+                        } else {
+                            sliceTabsContainer.style.display = 'none';
+                            sliderCont.style.display = 'none';
+                        }
+                    } else if (attempts > 30) {
+                        clearInterval(pollTimer);
+                        loader.style.opacity = '0';
+                        // Keep overlay for toggles if applicable, otherwise hide
+                        document.getElementById('mainOverlay').style.opacity = '0';
+                        document.getElementById('mainOverlay').style.pointerEvents = 'none';
                     }
                 }, 100);
             });
 
             function setupSlider() {
-                if(!brainRef || !brainRef.nbSlice) return;
+                if(!brainRef || !brainRef.nbSlice) {
+                    sliderCont.style.display = 'none';
+                    return;
+                }
 
                 const maxSlice = brainRef.nbSlice[currentAxis] - 1;
                 slider.min = 0;
@@ -389,13 +494,14 @@ if (isset($_SESSION['student_user'])) {
                 slider.value = brainRef.numSlice[currentAxis];
                 
                 // Show slider smoothly
+                sliderCont.style.display = 'flex';
                 sliderCont.style.opacity = '1';
                 sliderCont.style.pointerEvents = 'auto';
 
                 // Sync slider if user clicks on the 3D canvas
                 if (syncInterval) clearInterval(syncInterval);
                 syncInterval = setInterval(() => {
-                    if (brainRef && sliderCont.style.opacity === '1') {
+                    if (brainRef && sliderCont.style.opacity === '1' && currentViewMode === 'slice') {
                         const currentModelVal = brainRef.numSlice[currentAxis];
                         if (parseInt(slider.value, 10) !== currentModelVal) {
                             slider.value = currentModelVal;
@@ -424,11 +530,14 @@ if (isset($_SESSION['student_user'])) {
                     if (data.status === 'kicked') window.location.href = 'index.php?kicked=1';
                     
                     if (data.current_view && data.current_view !== currentDatasetHtml) {
+                        const oldHtml = currentDatasetHtml;
                         currentDatasetHtml = data.current_view;
                         loader.style.opacity = '1';
-                        sliderCont.style.opacity = '0';
-                        sliderCont.style.pointerEvents = 'none';
-                        iframe.src = currentDatasetHtml;
+                        // Reset to Surface mode for a new transition if it's jbr
+                        if (currentDatasetHtml === 'jbr_damage.html') {
+                            // currentViewMode = 'surf'; // Optionally keep user preference
+                        }
+                        updateIframeSource(currentDatasetHtml);
                         brainRef = null;
                     }
                 }).catch(err => console.error("Poll error:", err));
